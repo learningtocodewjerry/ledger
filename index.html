@@ -184,7 +184,7 @@ details{margin-top:var(--s4)}summary{color:var(--mute);font-size:14px;margin-bot
 <main id="v-wealth" class="view hide">
   <div class="card pad"><small style="color:var(--mute)">Net worth</small><div class="num" id="wnw" data-s style="margin:4px 0 16px">$0</div><div id="comp"></div></div>
   <h2>Bank accounts <button data-add="bank">Add</button></h2><div id="banks"></div>
-  <h2>Investments <button data-add="invest">Add</button></h2><div id="invs"></div>
+  <h2>Investments <span><button id="pxr">Refresh</button><button data-add="invest">Add</button></span></h2><p class="cap" id="pxst" style="margin:-4px 4px 10px"></p><div id="invs"></div>
 </main>
 
 <main id="v-bud" class="view hide">
@@ -196,6 +196,7 @@ details{margin-top:var(--s4)}summary{color:var(--mute);font-size:14px;margin-bot
 
 <main id="v-more" class="view hide">
   <h2>Profile</h2><div class="card pad"><label for="uname" style="margin-top:0">Your name</label><input id="uname" type="text" placeholder="Shown in your greeting"></div>
+  <h2>Live prices</h2><div class="card pad"><p class="cap">Investment prices come from Twelve Data’s free plan, which can be delayed. Paste your free API key. It stays on this phone and is never included in backups.</p><label for="apikey" style="margin-top:0">API key</label><input id="apikey" type="password" autocomplete="off" autocapitalize="off" placeholder="Paste your key"><div class="btns"><button class="btn pri sm" id="keysave">Save key</button><button class="btn sm" id="keytest">Refresh now</button></div><p class="cap" id="keymsg" style="margin:10px 4px 0"></p></div>
   <h2>Backup</h2><div class="card pad"><p class="cap" id="lbtxt"></p><button class="btn pri" id="sbf">Save backup file</button>
     <label for="rfile">Restore from a backup file</label><input type="file" id="rfile" accept=".json,application/json"><p class="cap" id="bmsg" style="margin:10px 4px 0"></p>
     <details><summary>Use text instead</summary><textarea id="backup" aria-label="Backup text"></textarea><div class="btns"><button class="btn sm" id="copy">Copy backup</button><button class="btn sm" id="restore">Restore from text</button></div></details></div>
@@ -227,8 +228,12 @@ details{margin-top:var(--s4)}summary{color:var(--mute);font-size:14px;margin-bot
 <div class="sheet" id="asheet"><div class="panel"><div class="grab"></div>
   <h3 id="atitle">Add account</h3>
   <label for="aname" style="margin-top:0">Name</label><input id="aname" type="text" placeholder="e.g. DBS Multiplier">
-  <label for="abal" id="ablab">Current balance</label><input id="abal" type="number" inputmode="decimal" step="0.01">
-  <div id="acostw"><label for="acost">Amount invested (cost)</label><input id="acost" type="number" inputmode="decimal" step="0.01"></div>
+  <div id="symw" class="hide"><label for="asym">Symbol (optional)</label>
+    <div style="display:grid;grid-template-columns:1fr auto;gap:8px"><input id="asym" type="text" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="e.g. VOO"><button class="btn sm" id="alook" type="button">Look up</button></div>
+    <p class="cap" id="symmsg" style="margin:8px 4px 0"></p>
+    <label for="aunits">Units held</label><input id="aunits" type="number" inputmode="decimal" step="any"></div>
+  <div id="abalw"><label for="abal" id="ablab">Current balance</label><input id="abal" type="number" inputmode="decimal" step="0.01"></div>
+  <div id="acostw"><label for="acost">Amount invested (SGD)</label><input id="acost" type="number" inputmode="decimal" step="0.01"></div>
   <div class="btns"><button class="btn del hide" id="adel">Delete</button><button class="btn pri" id="asave">Save</button></div>
 </div></div>
 
@@ -243,8 +248,8 @@ var CATS=["Food","Transport","Groceries","Shopping","Bills","Home","Health","Fun
 var INCOME=["Salary","Side income","Dividends","Other income"];
 var CI={Food:"food",Transport:"bus",Groceries:"basket",Shopping:"bag",Bills:"receipt",Home:"home",Health:"heart",Fun:"film",Travel:"plane",Other:"dots",Salary:"cash","Side income":"spark",Dividends:"trend","Other income":"coin"};
 var KEY="ledger.v2";
-var S={tx:[],budgets:{},accts:[],snaps:{},lb:0,name:"",hide:0,li:0,v:3};
-function norm(p){var o={tx:p.tx||[],budgets:p.budgets||{},accts:p.accts||[],snaps:p.snaps||{},lb:p.lb||0,name:p.name||"",hide:p.hide||0,li:p.li||0,v:3};
+var S={tx:[],budgets:{},accts:[],snaps:{},lb:0,name:"",hide:0,li:0,fx:0,fxAt:0,px:0,v:3};
+function norm(p){var o={tx:p.tx||[],budgets:p.budgets||{},accts:p.accts||[],snaps:p.snaps||{},lb:p.lb||0,name:p.name||"",hide:p.hide||0,li:p.li||0,fx:p.fx||0,fxAt:p.fxAt||0,px:p.px||0,v:3};
   if((p.v||0)<3)o.tx.forEach(function(t){if(typeof t.acct==="string"&&t.acct!==""){t.acct=+t.acct;o.accts.forEach(function(a){if(a.id===t.acct&&a.kind==="bank")a.opening-=(t.type==="in"?t.amount:-t.amount)})}else if(t.acct==="")t.acct=""});
   return o}
 function uid(){return Date.now()*1000+Math.floor(Math.random()*1000)}
@@ -262,7 +267,39 @@ function ic(n){return'<svg class="i"><use href="#ic-'+n+'"/></svg>'}
 function inMonth(t){return+t.date.slice(0,4)*12+ +t.date.slice(5,7)-1===ym}
 function acct(id){return S.accts.filter(function(a){return a.id===id})[0]}
 function txSum(id){var s=0;S.tx.forEach(function(t){if(t.acct===id)s+=t.type==="in"?t.amount:-t.amount});return s}
-function bal(a){return a.kind==="bank"?a.opening+txSum(a.id):a.opening}
+function liveVal(a){if(!a.sym||!a.px)return null;var f=a.ccy==="USD"?S.fx:1;return f?a.units*a.px*f:null}
+function bal(a){if(a.kind==="bank")return a.opening+txSum(a.id);var v=liveVal(a);return v===null?a.opening:v}
+function getKey(){try{return localStorage.getItem("ledger.key")||""}catch(e){return""}}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
+async function td(path,params){var r=await fetch("https://api.twelvedata.com/"+path+"?"+new URLSearchParams(params).toString());return r.json()}
+var pxBusy=false,pxMsg="";
+function setMsg(m){pxMsg=m;render()}
+async function refresh(manual){
+  var key=getKey(),hs=S.accts.filter(function(a){return a.kind==="invest"&&a.sym});
+  if(!key){if(manual)toast("Add your price key under More first.");return}
+  if(!hs.length){if(manual)toast("Add an investment with a symbol first.");return}
+  if(pxBusy)return;pxBusy=true;
+  var syms=[];hs.forEach(function(a){if(syms.indexOf(a.sym)<0)syms.push(a.sym)});
+  if(hs.some(function(a){return a.ccy==="USD"}))syms.push("USD/SGD");
+  var chunks=[];for(var i=0;i<syms.length;i+=7)chunks.push(syms.slice(i,i+7));
+  var bad=[],note="";
+  try{
+    for(var c=0;c<chunks.length;c++){
+      if(c>0){setMsg("Waiting for the free-plan rate limit ("+(c+1)+" of "+chunks.length+")…");await sleep(61000)}
+      else setMsg("Updating prices…");
+      var ch=chunks[c],resp=await td("price",{symbol:ch.join(","),apikey:key}),map={};
+      if(ch.length===1)map[ch[0]]=resp;else map=resp||{};
+      if(resp&&resp.code&&ch.length>1&&!map[ch[0]]){note=resp.message||"";}
+      ch.forEach(function(sy){var r=map[sy],p=r&&parseFloat(r.price);
+        if(p>0){if(sy==="USD/SGD"){S.fx=p;S.fxAt=Date.now()}else hs.forEach(function(a){if(a.sym===sy){a.px=p;a.pxAt=Date.now()}})}
+        else{bad.push(sy);if(r&&r.message&&!note)note=r.message}})}
+  }catch(e){note="Couldn’t reach the price service.";bad.push("network")}
+  hs.forEach(function(a){var v=liveVal(a);if(v!==null)a.opening=Math.round(v*100)/100});
+  if(bad.length<syms.length){S.px=Date.now()}
+  pxBusy=false;pxMsg="";save();snap();render();
+  if(bad.length)toast("Couldn’t update "+bad.join(", ")+(note?": "+note:""));
+}
+function autoRefresh(){if(getKey()&&S.accts.some(function(a){return a.sym})&&(!S.px||Date.now()-S.px>15*60000))refresh(false)}
 function totals(){var c=0,i=0;S.accts.forEach(function(a){var b=bal(a);if(a.kind==="bank")c+=b;else i+=b});return{c:c,i:i,n:c+i}}
 function snap(){if(!S.accts.length)return;S.snaps[today()]=Math.round(totals().n*100)/100;save()}
 function mname(){return new Date(Math.floor(ym/12),ym%12,1).toLocaleString("en-SG",{month:"long",year:"numeric"})}
@@ -309,8 +346,11 @@ function render(){
   var bh="",ih="";S.accts.forEach(function(a){var b=bal(a);
     if(a.kind==="bank")bh+='<button class="row" data-aid="'+a.id+'"><span class="chip">'+ic("bank")+'</span><span class="rt"><b>'+esc(a.name)+'</b><small>Bank account</small></span><span class="ra"><b data-s>'+money(b,1)+'</b></span></button>';
     else{var gl=b-(a.cost||0),g2=a.cost>0?'<span class="gain '+(gl>=0?"pos":"neg")+'" data-s>'+(gl>=0?"↗ ":"↘ ")+Math.abs(gl/a.cost*100).toFixed(1)+'%</span>':"";
-      ih+='<button class="row" data-aid="'+a.id+'"><span class="chip">'+ic("trend")+'</span><span class="rt"><b>'+esc(a.name)+'</b><small>'+(a.cost>0?"Invested "+money(a.cost):"Investment")+'</small></span><span class="ra"><b data-s>'+money(b,1)+'</b>'+g2+'</span></button>'}});
+      ih+='<button class="row" data-aid="'+a.id+'"><span class="chip">'+ic("trend")+'</span><span class="rt"><b>'+esc(a.name)+'</b><small>'+(a.sym?esc(a.sym)+" · "+a.units+" units":(a.cost>0?"Invested "+money(a.cost):"Investment"))+'</small></span><span class="ra"><b data-s>'+money(b,1)+'</b>'+g2+'</span></button>'}});
   $("banks").innerHTML=bh||'<div class="card empty">Add the balance of each bank account.</div>';
+  var hsym=S.accts.some(function(a){return a.kind==="invest"&&a.sym}),age=S.px?(Date.now()-S.px)/864e5:0;
+  $("pxst").style.display=hsym?"":"none";$("pxr").style.display=hsym?"":"none";
+  $("pxst").textContent=pxMsg||(!getKey()?"Add your price key under More to update prices.":(S.px?"Prices as of "+new Date(S.px).toLocaleString("en-SG",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})+(age>=2?" · may be out of date":""):"Prices not updated yet."));
   $("invs").innerHTML=ih||'<div class="card empty">Add each holding with its current value.</div>';
   var tb=0,sp=0,bl="",ul="";
   CATS.forEach(function(c){var s=by[c]||0,b=S.budgets[c]||0;
@@ -321,7 +361,7 @@ function render(){
 }
 function go(v){tab=v;["home","act","wealth","bud","more"].forEach(function(n){var el=$("v-"+n);el.classList.toggle("hide",n!==v);if(n===v){el.classList.remove("in");void el.offsetWidth;el.classList.add("in")}});
   document.querySelectorAll(".nav button").forEach(function(b){b.classList.toggle("on",b.dataset.v===v)});
-  if(v==="more"){$("backup").value=JSON.stringify(S);$("uname").value=S.name}header();window.scrollTo(0,0)}
+  if(v==="more"){$("backup").value=JSON.stringify(S);$("uname").value=S.name;$("apikey").value=getKey()}header();window.scrollTo(0,0)}
 function closeAll(){["sheet","asheet","bsheet"].forEach(function(i){$(i).classList.remove("open")})}
 function toast(m,fn){$("tmsg").textContent=m;$("tundo").style.display=fn?"":"none";$("tundo").onclick=function(){fn&&fn();$("toast").classList.remove("on")};$("toast").classList.add("on");clearTimeout(tt);tt=setTimeout(function(){$("toast").classList.remove("on")},5000)}
 function setAmt(){$("amt").textContent="$"+(amt||"0")}
@@ -341,13 +381,41 @@ $("save").onclick=function(){var a=parseFloat(amt);if(!(a>0)){toast("Enter an am
   if(editing)Object.assign(editing,rec);else{rec.id=uid();S.tx.push(rec)}
   ym=+rec.date.slice(0,4)*12+ +rec.date.slice(5,7)-1;save();snap();closeAll();render()};
 $("del").onclick=function(){var x=editing;S.tx=S.tx.filter(function(t){return t!==x});save();snap();closeAll();render();toast("Transaction deleted",function(){S.tx.push(x);save();snap();render()})};
+var pend=null;
 function openAcct(kind,a){aEdit=a||null;aKind=a?a.kind:kind;$("atitle").textContent=(a?"Edit ":"Add ")+(aKind==="bank"?"bank account":"investment");
   $("ablab").textContent=aKind==="bank"?"Current balance":"Current value";$("acostw").style.display=aKind==="bank"?"none":"block";
-  $("aname").value=a?a.name:"";$("abal").value=a?Math.round(bal(a)*100)/100:"";$("acost").value=a&&a.cost?a.cost:"";$("adel").classList.toggle("hide",!a);$("asheet").classList.add("open")}
-$("asave").onclick=function(){var n=$("aname").value.trim(),v=parseFloat($("abal").value);if(!n){$("aname").focus();return}if(isNaN(v)){$("abal").focus();return}
-  var cost=parseFloat($("acost").value)||0;
-  if(aEdit){aEdit.name=n;aEdit.cost=cost;aEdit.opening=aEdit.kind==="bank"?v-txSum(aEdit.id):v}else S.accts.push({id:uid(),name:n,kind:aKind,opening:v,cost:cost});
-  save();snap();closeAll();render()};
+  $("aname").value=a?a.name:"";$("abal").value=a?Math.round(bal(a)*100)/100:"";$("acost").value=a&&a.cost?a.cost:"";$("adel").classList.toggle("hide",!a);
+  var inv=aKind==="invest";$("symw").classList.toggle("hide",!inv);pend=null;$("symmsg").textContent="";
+  $("asym").value=a&&a.sym?a.sym:"";$("aunits").value=a&&a.units?a.units:"";
+  if(a&&a.sym)pend={input:a.sym,sym:a.sym,ccy:a.ccy,px:a.px,name:"",at:a.pxAt};
+  $("abalw").classList.toggle("hide",inv&&!!$("asym").value);
+  $("asheet").classList.add("open")}
+$("asave").onclick=function(){var n=$("aname").value.trim();if(!n){$("aname").focus();return}
+  var cost=parseFloat($("acost").value)||0,sym=aKind==="invest"?$("asym").value.trim().toUpperCase():"",rec,v=0;
+  if(sym){var u=parseFloat($("aunits").value);
+    if(!pend||pend.input!==sym){$("symmsg").textContent="Tap Look up to check this symbol first.";return}
+    if(!(u>0)){$("aunits").focus();return}
+    rec={name:n,cost:cost,sym:sym,units:u,ccy:pend.ccy,px:pend.px,pxAt:pend.at,opening:0};
+    var lv=liveVal(rec);rec.opening=lv===null?0:Math.round(lv*100)/100}
+  else{v=parseFloat($("abal").value);if(isNaN(v)){$("abal").focus();return}
+    rec={name:n,cost:cost,sym:"",units:0,ccy:"",px:0,pxAt:0,opening:v}}
+  if(aEdit){if(aEdit.kind==="bank"){aEdit.name=n;aEdit.opening=v-txSum(aEdit.id)}else Object.assign(aEdit,rec)}
+  else{if(aKind==="bank")rec={name:n,opening:v,cost:0};S.accts.push(Object.assign({id:uid(),kind:aKind},rec))}
+  save();snap();closeAll();render();if(sym)refresh(false)};
+$("asym").oninput=function(){$("abalw").classList.toggle("hide",aKind==="invest"&&!!this.value.trim())};
+$("alook").onclick=async function(){var sym=$("asym").value.trim().toUpperCase(),key=getKey(),m=$("symmsg");
+  if(!sym){m.textContent="Type a symbol first.";return}
+  if(!key){m.textContent="Add your price key under More first.";return}
+  m.textContent="Looking up…";
+  try{var r=await td("quote",{symbol:sym,apikey:key});
+    if(r.status==="error"||r.code){pend=null;m.textContent=(r.message||"Symbol not found.")+" Clear the symbol to enter the value yourself.";return}
+    var c=r.currency||"";
+    if(c!=="USD"&&c!=="SGD"){pend=null;m.textContent=(r.name||sym)+" trades in "+(c||"an unknown currency")+". Only USD and SGD are supported, so enter its value manually.";return}
+    var px=parseFloat(r.close);if(!(px>0)){pend=null;m.textContent="No price returned for this symbol.";return}
+    pend={input:sym,sym:sym,ccy:c,px:px,name:r.name||"",at:Date.now()};
+    if(c==="USD"&&!S.fx){var fr=await td("price",{symbol:"USD/SGD",apikey:key});if(fr&&parseFloat(fr.price)>0){S.fx=parseFloat(fr.price);S.fxAt=Date.now()}}
+    m.textContent=(r.name||sym)+" · "+c+" "+px.toLocaleString("en-SG",{maximumFractionDigits:2})+" ✓"}
+  catch(e){pend=null;m.textContent="Couldn’t reach the price service. Check your connection."}};
 $("adel").onclick=function(){S.accts=S.accts.filter(function(a){return a!==aEdit});S.tx.forEach(function(t){if(t.acct===aEdit.id)t.acct=""});save();snap();closeAll();render()};
 function openBud(){$("budfields").innerHTML=CATS.map(function(c){return'<div class="bud"><span><i class="chip">'+ic(CI[c])+'</i>'+c+'</span><input type="number" inputmode="decimal" data-c="'+c+'" value="'+(S.budgets[c]||"")+'" placeholder="No limit" aria-label="'+c+' limit"></div>'}).join("");$("bsheet").classList.add("open")}
 $("bsave").onclick=function(){var b={};document.querySelectorAll("#budfields input").forEach(function(i){var v=parseFloat(i.value);if(v>0)b[i.dataset.c]=v});S.budgets=b;save();closeAll();render()};
@@ -359,6 +427,7 @@ document.body.addEventListener("click",function(e){var t=e.target,b;
   else if(b=t.closest("[data-go]"))go(b.dataset.go);
   else if(t.closest("[data-editbud]")||t.closest("#editbud"))openBud();
   else if(t.closest(".mp")){ym--;render()}else if(t.closest(".mx")){ym++;render()}
+  else if(t.closest("#pxr"))refresh(true);
   else if(t.closest("#fab"))openTx();
   else if(b=t.closest(".nav button"))go(b.dataset.v);
   else if(t.closest("#eye")){S.hide=S.hide?0:1;save();header()}
@@ -368,6 +437,10 @@ document.querySelectorAll(".grab").forEach(function(g){var p=g.parentNode,y0=0,d
   g.addEventListener("touchmove",function(e){dy=Math.max(0,e.touches[0].clientY-y0);p.style.transform="translateY("+dy+"px)"},{passive:true});
   g.addEventListener("touchend",function(){p.style.transition="transform .2s";if(dy>110)closeAll();p.style.transform="";dy=0})});
 window.addEventListener("scroll",function(){document.querySelector(".top").classList.toggle("sc",window.scrollY>4)},{passive:true});
+$("keysave").onclick=function(){var k=$("apikey").value.trim();try{if(k)localStorage.setItem("ledger.key",k);else localStorage.removeItem("ledger.key")}catch(e){}
+  $("keymsg").textContent=k?"Key saved on this phone.":"Key removed.";render();if(k)autoRefresh()};
+$("keytest").onclick=function(){$("keymsg").textContent=getKey()?"Updating… check the Wealth tab.":"Save your key first.";refresh(true)};
+document.addEventListener("visibilitychange",function(){if(!document.hidden)autoRefresh()});
 $("uname").onchange=function(){S.name=this.value.trim();save();header()};
 function restoreText(t){try{var p=JSON.parse(t);if(!p||!Array.isArray(p.tx))throw 0;S=norm(p);save();render();$("bmsg").textContent="Restored "+S.tx.length+" transactions and "+S.accts.length+" accounts."}catch(e){$("bmsg").textContent="That isn’t a valid backup. Use the full backup and try again."}}
 function saveFile(){var txt=JSON.stringify(S),name="ledger-backup-"+today()+".json",f=null;try{f=new File([txt],name,{type:"application/json"})}catch(e){}
@@ -394,7 +467,7 @@ $("inbox").onchange=function(){var f=this.files[0];if(!f)return;var rd=new FileR
 try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
 idbGet().then(function(v){
   if(v&&v.tx){S=norm(v)}else{try{var r=localStorage.getItem(KEY)||localStorage.getItem("ledger.v1");if(r)S=norm(JSON.parse(r))}catch(e){}}
-  save();snap();render()});
+  save();snap();render();autoRefresh()});
 })();
 </script>
 </body>
